@@ -377,3 +377,160 @@ def query_order_payload(idc, text, export=0, assigned=''):
 def query_body(source, data_base, sql):
     """构造执行查询的请求体（``lib.QueryDeal``）。"""
     return {'source': source, 'data_base': data_base, 'sql': sql}
+
+
+# --- 工单状态 ---------------------------------------------------------------
+
+# ``CoreSqlOrder.status`` 的取值。依据是上游 2.3.5 里真正写这个字段的几处代码，
+# 不是照抄前端文案：
+#
+#   handler/order/audit/impl.go   RejectOrder()  -> status = 0，提示语「工单已驳回！」
+#   handler/order/audit/impl.go   delayKill()    -> status = 4，「状态已更改为执行失败！」
+#   handler/order/audit/audit.go  ExecuteOrder() -> type == 3 的工单直接 status = 1
+#   handler/order/audit/executor.go Executor()   -> 交给执行器前 status = 3
+#
+# 另外两条反向证据（说明 2 和 5 是「还没执行」）：
+#
+#   ExecuteOrder() 只接受 status 为 2 或 5 的工单去执行，其余一律回「工单已执行过」
+#   FetchUndo()    只允许撤销 status = 2 的工单
+ORDER_STATUS = {
+    0: '已驳回',
+    1: '已执行',
+    2: '审核中',
+    3: '执行中',
+    4: '执行失败',
+    5: '待执行',
+}
+
+# 7 不是数据库里的值，是「不筛」。服务端 AccordingToAllOrderState() 里
+# ``case 7: return db``，其余值走 ``WHERE status = ?``。
+ORDER_STATUS_ALL = 7
+
+# 输入用的别名，方便直接写中文
+_STATUS_ALIASES = {
+    '全部': ORDER_STATUS_ALL,
+    '所有': ORDER_STATUS_ALL,
+    '待审核': 2, '审批中': 2, '审核': 2,
+    '成功': 1, '已完成': 1, '完成': 1,
+    '失败': 4,
+    '驳回': 0, '被驳回': 0,
+    '撤销': 3, '已撤销': 3, '终止': 4,
+}
+
+# 中文标签（'已驳回' 这种，就是 ORDER_STATUS 里的值）也直接收，别名放在后面可覆盖
+_STATUS_CHOICES = dict((label, code) for code, label in ORDER_STATUS.items())
+_STATUS_CHOICES['全部'] = ORDER_STATUS_ALL
+_STATUS_CHOICES.update(_STATUS_ALIASES)
+
+
+def status_label(code):
+    """状态码转中文标签。"""
+    code = int(code)
+    if code == ORDER_STATUS_ALL:
+        return '全部'
+    return ORDER_STATUS.get(code, '未知状态(%d)' % code)
+
+
+def resolve_order_status(value):
+    """把用户给的 status 解析成服务端要的数字。
+
+    缺省是 :data:`ORDER_STATUS_ALL`（7）—— **这一点必须显式做**。
+    Go 绑定 JSON 时 ``find.status`` 缺失会得到零值 ``0``，而服务端对 ``0``
+    的处理是 ``WHERE status = 0``（已驳回）。曾因此把「全部工单」静默变成
+    「只看已驳回」，1165 条里只显示 2 条。
+    """
+    if value in (None, ''):
+        return ORDER_STATUS_ALL
+    if isinstance(value, bool):
+        raise ValueError('status 不能是布尔值')
+    if isinstance(value, int):
+        code = value
+    else:
+        text = str(value).strip()
+        if text.isdigit():
+            code = int(text)
+        else:
+            code = _STATUS_CHOICES.get(text)
+            if code is None:
+                code = _STATUS_CHOICES.get(text.replace('工单', ''))
+            if code is None:
+                raise ValueError(
+                    '认不出 status=%r。可用：%s（7 = 全部），'
+                    '或直接写中文标签如「已驳回」。'
+                    % (value, ' / '.join(str(k) for k in sorted(ORDER_STATUS))))
+            return code
+    if code == ORDER_STATUS_ALL or code in ORDER_STATUS:
+        return code
+    raise ValueError(
+        'status=%r 不是已知状态。可用：%s（7 = 全部）'
+        % (value, ' / '.join(
+            '%d=%s' % (k, v) for k, v in sorted(ORDER_STATUS.items()))))
+
+
+def date_only(value):
+    """把日期规整成 ``YYYY-MM-DD``。
+
+    Yearning 的 ``find.picker`` 是拿 ``time`` 列做**字符串区间比较**，
+    而那一列只存日期（``2026-09-23``）。如果传 ``2026-09-23 00:00``，
+    区间下界就会大于列值，结果**恒为空**且不报任何错。
+    所以这里统一截到日期部分，``2026/09/23``、``2026.9.3`` 也一并收下。
+    """
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    match = re.match(r'^([0-9]{4})[-/.]([0-9]{1,2})[-/.]([0-9]{1,2})', text)
+    if not match:
+        raise ValueError('日期格式认不出：%r。请用 YYYY-MM-DD。' % (value,))
+    year, month, day = match.groups()
+    return '%04d-%02d-%02d' % (int(year), int(month), int(day))
+
+
+def order_list_find(status=None, text='', picker=None, type_code=2):
+    """构造 ``PUT /api/v2/common/list`` 的 ``find`` 体。
+
+    字段与前端下拉框发的一模一样，多出来的键服务端会忽略 —— 与网页行为保持一致
+    比精简请求体更重要。注意 ``type`` 这个键：``PersonalFetchMyOrder`` 根本没读它，
+    是前端给别的列表页共用的，这里保留默认值只为对齐。
+
+    ``picker`` 传 ``[开始日期, 结束日期]``；给空串表示不限时间。
+    """
+    start = end = ''
+    if picker:
+        pair = list(picker)
+        if len(pair) != 2:
+            raise ValueError('picker 需要 [开始日期, 结束日期] 两个值')
+        start, end = date_only(pair[0]), date_only(pair[1])
+        if start and not end:
+            end = start
+        if end and not start:
+            start = end
+        if start and end and start > end:
+            start, end = end, start
+    return {
+        'picker': [start, end],
+        'valve': False,
+        'text': str(text or '').strip(),
+        'explain': '',
+        'work_id': '',
+        'type': type_code,
+        'status': resolve_order_status(status),
+        'source': '',
+        'idc': '',
+        'dept': '',
+        'username': '',
+    }
+
+
+MY_ORDERS_PAGE_SIZE = 15
+
+
+def describe_my_orders_filter(find, page):
+    """把实际生效的筛选条件写成人话，避免「我筛了但没生效」这类误判。"""
+    bits = ['状态=%s' % status_label(find.get('status'))]
+    if find.get('text'):
+        bits.append('说明含 %r' % find['text'])
+    start, end = (find.get('picker') or ['', ''])[:2]
+    if start or end:
+        bits.append('时间 %s ~ %s' % (start or '(不限)', end or '(不限)'))
+    return '筛选：%s  |  第 %d 页（每页 %d 条）' % (
+        '，'.join(bits), page, MY_ORDERS_PAGE_SIZE)

@@ -128,6 +128,52 @@ GET /api/v2/fetch/source?idc=<环境名>&tp=<ddl|dml|query>
 `fetch/source` 里（也就是前端下拉框）。直接 POST 可以给任意数据源提工单 ——
 调用方必须自己补闸门。
 
+### `PUT /api/v2/common/list` —— 我提交过的工单
+
+请求体是 `{page, find, tp}`，服务端（`personal.PersonalFetchMyOrder`）只读 `page`
+与 `find`。`find` 的完整形状就是前端下拉框发的那份：
+
+```json
+{
+  "page": 1,
+  "find": {
+    "picker": ["", ""], "valve": false, "text": "", "explain": "",
+    "work_id": "", "type": 2, "status": 7, "source": "", "idc": "",
+    "dept": "", "username": ""
+  },
+  "tp": ""
+}
+```
+
+**真正生效的只有 3 个键**：`status`、`text`、`picker`
+（分别走 `AccordingToAllOrderState` / `AccordingToText` / `AccordingToDatetime`）。
+`type`、`source`、`idc`、`work_id`、`dept` 这个接口里没人读，是前端给别的列表页共用的。
+
+| 键 | 行为 | 坑 |
+|---|---|---|
+| `status` | `7` = 不筛（全部）；其余走 `WHERE status = ?`，取值见下表 | **`find` 里不带 `status` 时 Go 零值是 `0`，等价于「只看已驳回」。** 实测线上 1165 条工单因此只显示了 2 条 —— 要全部就必须显式写 `7` |
+| `text` | `text LIKE %…%`，匹配工单说明 | 空串等于不筛 |
+| `picker` | `time >= 开始 AND time <= 结束`，**字符串比较** | `time` 列只存日期。传 `2026-09-23 00:00` 会让区间下界大于列值 → **恒返回空，且不报任何错**。只能给 `YYYY-MM-DD` |
+
+分页固定每页 15 条（服务端 `lib.Paging(page, 15)`），没有 `pagesize` 参数。
+
+#### `CoreSqlOrder.status` 取值
+
+依据是上游真正写这个字段的代码路径，不是前端文案：
+
+| 值 | 含义 | 依据 |
+|---|---|---|
+| `0` | 已驳回 | `RejectOrder()` 写死 `status = 0`，提示语「工单已驳回！」 |
+| `1` | 已执行 | `ExecuteOrder()` 里 `type == 3` 的工单直接置 `1` |
+| `2` | 审核中 | `ExecuteOrder()` 只接受 `2` 或 `5` 进入执行；`FetchUndo()` 只允许撤销 `2` |
+| `3` | 执行中 | `Executor()` 交给执行器前先置 `3` |
+| `4` | 执行失败 | `delayKill()` 置 `4`，提示语「状态已更改为执行失败！」 |
+| `5` | 待执行 | 同上 —— `ExecuteOrder()` 接受 `5`，说明它还没执行过 |
+| `7` | 全部 | `AccordingToAllOrderState()` 里 `case 7: return db`，7 不是数据库里的值 |
+
+`status` 与 `query_per` 是两套编号：查询工单的 `1` / `2` / `3`
+（已生效 / 待审核 / 已结束）见下面「查询」一节，别混看。
+
 ---
 
 ## 查询 `/api/v2/query/:tp`

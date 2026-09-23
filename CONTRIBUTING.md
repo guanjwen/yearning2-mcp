@@ -66,7 +66,7 @@ python -m yearning2_mcp --selftest
 
 1. 更新 `src/yearning2_mcp/__init__.py` 的 `__version__`
 2. 更新 `CHANGELOG.md`
-3. 打 tag：`git tag -a v0.2.0 -m "v0.2.0"`
+3. 打 tag：`git tag -a v0.2.1 -m "v0.2.1"`
 4. `python -m build`
 5. `twine check dist/*`
 6. `twine upload dist/*`

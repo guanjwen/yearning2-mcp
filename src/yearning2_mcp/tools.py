@@ -389,7 +389,18 @@ def build_tools(client, config_source):
         page = _int_arg(args, 'page', 1)
         if page < 1:
             page = 1
-        status, data = act('my_orders', {'page': page, 'find': {}, 'tp': ''})
+
+        try:
+            since, until = args.get('since'), args.get('until')
+            picker = None if (since in (None, '') and until in (None, '')) \
+                else [since, until]
+            find = writes.order_list_find(status=args.get('status'),
+                                          text=args.get('text'),
+                                          picker=picker)
+        except ValueError as e:
+            raise ToolError(str(e))
+
+        status, data = act('my_orders', {'page': page, 'find': find, 'tp': ''})
         payload = _payload_of(data)
         if not isinstance(payload, dict):
             return 'PUT /api/v2/common/list -> HTTP %s\n%s' % (status, _pretty(data))
@@ -397,14 +408,22 @@ def build_tools(client, config_source):
         records = payload.get('data') or []
         total = payload.get('page')
         type_names = {0: 'DDL', 1: 'DML'}
-        lines = ['我提交的工单 —— 共 %s 条，本页 %d 条 (page=%d):' % (
-            total, len(records), page)]
+        lines = ['我提交的工单 —— 命中 %s 条，本页 %d 条:' % (total, len(records)),
+                 '  %s' % writes.describe_my_orders_filter(find, page)]
         if not records:
-            lines.append('  （空）')
+            lines.append('')
+            lines.append('  （空。若这个筛选条件下本不该为空，把 status 换成'
+                         ' 7 / 全部 再查一次 —— 默认就是全部，除非你显式指定了别的。）')
             return '\n'.join(lines)
 
         def item(label, value):
             return '  %s: %s' % (_pad(label, 9), value)
+
+        def state_text(code):
+            try:
+                return writes.status_label(code)
+            except (TypeError, ValueError):
+                return str(code)
 
         for r in records:
             if not isinstance(r, dict):
@@ -412,15 +431,23 @@ def build_tools(client, config_source):
             lines.append('')
             lines.append(item('work_id', r.get('work_id')))
             lines.append(item('类型', '%s   状态: %s' % (
-                type_names.get(r.get('type'), r.get('type')), r.get('status'))))
+                type_names.get(r.get('type'), r.get('type')),
+                state_text(r.get('status')))))
             lines.append(item('环境/源', '%s / %s' % (r.get('idc'), r.get('source'))))
             lines.append(item('库/表', '%s / %s' % (r.get('data_base'),
                                                    r.get('table') or '-')))
             lines.append(item('说明', (r.get('text') or '').strip()))
             lines.append(item('审核人', '%s   提交: %s' % (r.get('assigned'),
                                                         r.get('date'))))
+
+        shown = page * writes.MY_ORDERS_PAGE_SIZE
+        if isinstance(total, int) and total > shown:
+            lines.append('')
+            lines.append('还有 %d 条没显示，加大 page 继续翻，'
+                         '或用 status / text / since / until 收窄。' % (total - shown))
         lines.append('')
-        lines.append('提示：撤销未开始的工单用 yearning_revoke(target="order", work_id=...)。')
+        lines.append('提示：撤销「审核中」的工单用 yearning_revoke(target="order", '
+                     'work_id=...)。')
         return '\n'.join(lines)
 
     def t_query_status(_args):
@@ -770,12 +797,31 @@ def build_tools(client, config_source):
         },
         {
             'name': 'yearning_my_orders',
-            'description': ('读取我提交过的 DDL/DML 工单列表（含 work_id、类型、状态、'
-                            '审核人）。撤销工单前先用它拿 work_id。'),
+            'description': (
+                '读取我提交过的 DDL/DML 工单列表（含 work_id、类型、状态、审核人）。'
+                '默认返回全部状态，可用 status / text / since / until 收窄。'
+                '状态码：0=已驳回、1=已执行、2=审核中、3=执行中、4=执行失败、'
+                '5=待执行、7=全部（默认）。也可以直接传中文标签，例如 '
+                'status="已驳回"。撤销工单前先用它拿 work_id。'),
             'inputSchema': {
                 'type': 'object',
                 'properties': {
-                    'page': {'type': 'integer', 'description': '页码，从 1 开始，默认 1'},
+                    'page': {'type': 'integer',
+                             'description': '页码，从 1 开始，默认 1；每页 15 条'},
+                    'status': {
+                        'type': ['integer', 'string'],
+                        'description': ('按状态筛选。默认 7=全部。'
+                                        '0=已驳回 1=已执行 2=审核中 3=执行中 '
+                                        '4=执行失败 5=待执行，也可写中文标签'),
+                    },
+                    'text': {'type': 'string',
+                             'description': '按工单说明模糊匹配（LIKE %text%）'},
+                    'since': {'type': 'string',
+                              'description': ('起始日期 YYYY-MM-DD。'
+                                              '注意只能给日期，不能带时分 —— '
+                                              '服务端是拿日期列做字符串比较的')},
+                    'until': {'type': 'string',
+                              'description': '结束日期 YYYY-MM-DD，只给日期'},
                 },
             },
             'handler': t_my_orders,

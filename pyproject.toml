@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yearning2-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "Yearning 2.x 的 MCP 服务端：只读查询 + 提工单/查数据，带多层安全闸门（零第三方依赖）"
 readme = "README.md"
 requires-python = ">=3.9"

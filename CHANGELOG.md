@@ -3,6 +3,26 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.2.1] - 2026-09-23
+
+### 修复
+
+- **`yearning_my_orders` 只能看到「已驳回」的工单。** 请求体里的 `find` 原来发的是空对象，
+  而服务端用 Go 绑定 JSON 时 `find.status` 缺省为 `0`，`AccordingToAllOrderState(0)`
+  等价于 `WHERE status = 0` —— 也就是只返回已驳回。线上实测：1165 条工单里只显示了 2 条。
+  现在默认显式发 `status = 7`（不筛）。
+
+### 新增
+
+- `yearning_my_orders` 支持 `status` / `text` / `since` / `until` 四个筛选参数：
+  `status` 可用数字或中文标签（`已驳回` / `已执行` / `审核中` / `执行中` /
+  `执行失败` / `待执行` / `全部`），`text` 按工单说明模糊匹配，
+  `since` / `until` 按日期区间筛。输出里会回显实际生效的筛选条件。
+- 工单状态码的权威取值表（`writes.ORDER_STATUS`），依据是上游真正写这个字段的代码路径，
+  并写进 `yearning_my_orders` 的工具描述。
+- 日期入参自动规整成 `YYYY-MM-DD` —— `find.picker` 是拿日期列做字符串区间比较的，
+  传 `2026-09-23 00:00` 会让区间下界大于列值，**恒返回空且不报错**。
+
 ## [0.2.0] - 2026-09-23
 
 把 Yearning 2.x 接成 MCP：只读查询 + 提工单 + 执行查询，**不碰审批**。

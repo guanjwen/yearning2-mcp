@@ -121,7 +121,7 @@ yearning2-mcp --selftest         # 连通性 / 登录 / 权限 / 拦截规则，
 | 工具 | 作用 | 需要确认 |
 |---|---|---|
 | `yearning_submit_order` | 提交 DDL / DML 工单（进审核流程，**不会立即执行**） | ✅ 两步 |
-| `yearning_my_orders` | 我提交过的工单列表（含 work_id、类型、状态、审核人） | — |
+| `yearning_my_orders` | 我提交过的工单列表，可按状态 / 关键字 / 日期区间筛 | — |
 | `yearning_revoke` | 撤销我自己的待审工单 / 结束我自己的查询权限 | ✅ 两步 |
 
 接好之后不需要记工具名，直接说人话就行：
@@ -137,6 +137,8 @@ yearning2-mcp --selftest         # 连通性 / 登录 / 权限 / 拦截规则，
 | 「把 user 表加个索引，提个工单」 | `yearning_submit_order`（先给预览，你点头才提交） |
 | 「帮我查一下 xxx 库的订单表有多少行」 | `yearning_query_status` → `yearning_run_query` |
 | 「我刚提的那个工单批了吗」 | `yearning_my_orders` |
+| 「我今天的工单」 | `yearning_my_orders`（带 `since` / `until`） |
+| 「我有哪些执行失败的工单」 | `yearning_my_orders`（`status="执行失败"`） |
 | 「撤了刚才那个工单」 | `yearning_revoke` |
 
 ---
