@@ -1,0 +1,41 @@
+# 构建产物
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+.python-version
+
+# 测试与覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# 运行期产物 —— 凭据与日志绝不该进仓库
+.yearning/
+config.json
+!examples/config.example.json
+*.log
+*.log.old
+.token
+session.json
+.identity.json
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

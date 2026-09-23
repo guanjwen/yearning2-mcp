@@ -1,0 +1,6 @@
+{
+  "endpoint": "http://yearning.example.com:8000",
+  "username": "your-account",
+  "password": "your-password",
+  "login_mode": "ldap"
+}

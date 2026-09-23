@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    name: 测试 py${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 语法自检
+        run: python -m compileall -q src
+
+      - name: 跑测试（零依赖，不需要 pip install）
+        run: python run_tests.py
+
+      - name: 安装并验证入口点
+        run: |
+          pip install .
+          yearning2-mcp --version
+          yearning2-mcp --print-tools
+
+  build:
+    name: 构建发行包
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 安装构建工具
+        run: pip install build twine
+
+      - name: 构建 wheel 与 sdist
+        run: python -m build
+
+      - name: 校验发行包元数据
+        run: twine check dist/*
+
+      - name: 在干净环境里装 wheel 并冒烟
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/yearning2-mcp --version
+          /tmp/smoke/bin/yearning2-mcp --print-tools
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*

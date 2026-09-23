@@ -1,0 +1,18 @@
+# 仓库里一律存 LF；Windows 检出时批处理脚本还原成 CRLF
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# 二进制，别做换行符转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.whl  binary
+*.gz   binary
+*.zip  binary
+
+# 让语言统计认得这是纯 Python 项目
+*.py   text
