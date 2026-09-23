@@ -34,7 +34,7 @@ DEMO_GROUP = {
 
 # 每个环境里登记的全部数据源（fetch/source?tp=all 返回的）
 DEMO_ENV_SOURCES = {
-    'env-demo-a': ['demo_db_src', ' demo_readonly'],   # 第二个刻意带前导空格
+    'env-demo-a': ['demo_db_src', ' db-readonly'],   # 第二个刻意带前导空格
     'env-demo-b': ['other_src'],
 }
 
@@ -43,7 +43,7 @@ DEMO_PERMISSIONS = {
     'env-demo-a': {
         'ddl': ['demo_db_src'],
         'dml': ['demo_db_src'],
-        'query': ['demo_db_src', ' demo_readonly'],
+        'query': ['demo_db_src', ' db-readonly'],
     },
     'env-demo-b': {'ddl': [], 'dml': [], 'query': []},
 }

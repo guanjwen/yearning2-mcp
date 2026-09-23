@@ -93,7 +93,7 @@ class ToolsTest(YearningTestCase):
     def test_allowed_sources_flags_whitespace(self):
         """带前导空格的脏数据源名要标出来，不然用户复制过去会对不上。"""
         text = self.call('yearning_allowed_sources', idc='env-demo-a', type='query')
-        self.assertIn('demo_readonly', text)
+        self.assertIn('db-readonly', text)
         self.assertIn('前后空格', text)
 
     def test_allowed_sources_empty_env(self):
@@ -182,10 +182,10 @@ class ToolsTest(YearningTestCase):
 
     def test_run_query_resolves_whitespace_source(self):
         """用户给 strip 过的名字，发出去的必须是数据库里的原样字符串。"""
-        self.call('yearning_run_query', source='demo_readonly',
+        self.call('yearning_run_query', source='db-readonly',
                   data_base='demo_db', sql='SELECT 1')
         bodies = self.fake.write_bodies('/api/v2/query/results')
-        self.assertEqual(bodies[0]['source'], ' demo_readonly')
+        self.assertEqual(bodies[0]['source'], ' db-readonly')
 
     def test_run_query_rejects_write_sql_without_calling(self):
         for sql in ('DELETE FROM t', 'SELECT 1; DROP TABLE t',

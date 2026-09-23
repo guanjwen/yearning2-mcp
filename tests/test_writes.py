@@ -179,16 +179,16 @@ class ResolveSourceTest(unittest.TestCase):
         self.assertEqual(writes.resolve_source(['a', 'b'], 'a'), 'a')
 
     def test_returns_original_string_with_whitespace(self):
-        """线上真有 " demo_readonly" 这种带前导空格的记录。
+        """真实部署里可能出现带前后空格的数据源名。
 
         比对要宽松（strip 后比），但返回值必须是**原样字符串** ——
         Yearning 执行时是 ``WHERE source = ?`` 精确匹配。
         """
-        allowed = [' demo_readonly', 'demo_db_src']
-        self.assertEqual(writes.resolve_source(allowed, 'demo_readonly'),
-                         ' demo_readonly')
-        self.assertEqual(writes.resolve_source(allowed, '  demo_readonly '),
-                         ' demo_readonly')
+        allowed = [' db-readonly', 'demo_db_src']
+        self.assertEqual(writes.resolve_source(allowed, 'db-readonly'),
+                         ' db-readonly')
+        self.assertEqual(writes.resolve_source(allowed, '  db-readonly '),
+                         ' db-readonly')
 
     def test_miss_returns_none(self):
         self.assertIsNone(writes.resolve_source(['a'], 'z'))
