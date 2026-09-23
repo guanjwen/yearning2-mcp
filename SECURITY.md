@@ -31,13 +31,12 @@
 真正的写动作走 `WRITE_ACTIONS` 白名单，**方法 + 路径在代码里写死**，调用方只能填业务参数，
 无法自定义目标路径。白名单只有 7 条，且不含任何 `/api/v2/audit/**` 或 `/api/v2/manage/**`。
 
-由 `tests/test_safety.py::test_paths_are_hardcoded` 与
-`test_no_audit_or_manage_action_exposed` 守着。
+白名单是写死在源码里的常量，**没有配置项或环境变量能扩容** —— 想加一条只能改源码。
 
 ### 2. 拒绝清单在归一化后的路径上判定
 
 `%2e%2e`、尾部斜杠、大小写混杂、带查询串这些变体会先被 `normalize_path()` 归一化再进判定，
-避免编码绕过。`tests/test_safety.py::test_normalize_strips_query_and_case` 覆盖。
+避免编码绕过 —— 判定只看归一化之后的路径。
 
 ### 3. 四道闸门（提工单 / 执行查询）
 

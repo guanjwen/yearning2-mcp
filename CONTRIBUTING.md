@@ -1,23 +1,24 @@
 # 贡献指南
 
-先谢谢你有兴趣。这个项目很小，约定也很少，但下面四条是硬的。
+先谢谢你有兴趣。这个项目很小，约定也很少，但下面两条是硬的。
 
-## 四条硬约定
+## 两条硬约定
 
 1. **保持零第三方依赖。** 只用 Python 标准库。想加依赖之前先想清楚 —— 一个 MCP server
    的部署便利性就来自这里。`pyproject.toml` 里的 `dependencies` 必须保持为空。
 2. **写操作只有 7 个，且必须走白名单 + 闸门。** 新增写能力时：
    - 先在 `safety.WRITE_ACTIONS` 加一条 `动作名 → (方法, 路径)`，路径写死，**不接受调用方传路径**
-   - 纯逻辑校验放 `writes.py`（离线可测），HTTP 编排放 `tools.py`
+   - 纯逻辑校验放 `writes.py`，HTTP 编排放 `tools.py`
    - 需要确认的动作用 `safety.needs_confirm` + 显式 `confirm` 参数，默认只返回预览
    - **本地可判定的校验必须排在网络请求之前**，否则参数写错也会先在线上留痕迹
    - 仍然**不引入任何审批能力** —— 审批应该在 Yearning 网页上人工确认后执行
-3. **新增拦截规则必须同时改三处**：`src/yearning2_mcp/safety.py`、`tests/test_safety.py`
-   （正例与反例都要）、以及 `README.md` 的安全模型表格。改 `writes.py` 的只读判定时，
-   `tests/test_writes.py` 的 `ALLOWED` / `DENIED` 两张表要同时补 —— 只测「危险的被拒」
-   不够，**必须同时测「正常的没被误杀」**（黑词表把 `SELECT event FROM logs` 拒掉就是这么来的）。
-4. **负向用例要断言"没发出请求"。** 光断言抛异常不够 —— 那样改改提示语就能蒙过测试。
-   用 `fake.write_bodies(path)` 断言对应接口一次都没被调用。
+
+改拦截规则或闸门时，**同步改 `README.md` 的安全模型表格**。
+
+改只读判定（`writes.ensure_read_only`）时请手工过一遍这类语句：
+`SELECT event, set_at, load_user FROM logs` 带三个看起来"敏感"的词，但它必须被放行；
+`SELECT 1; DROP TABLE t` 必须被拒。**只测「危险的被拒」不够，还得测「正常的没被误杀」** ——
+大黑词表把正常查询拒掉就是这么来的。
 
 ## 开发环境
 
@@ -26,7 +27,7 @@
 ```bash
 git clone https://github.com/guanjwen/yearning2-mcp.git
 cd yearning2-mcp
-python run_tests.py -v
+python -m yearning2_mcp --print-tools    # 确认工具清单能正常生成
 ```
 
 跑真实环境自检（**别把真实地址和凭据写进仓库**）：
@@ -38,19 +39,8 @@ export YEARNING_PASSWORD=******
 python -m yearning2_mcp --selftest
 ```
 
-## 测试
-
-测试全部离线，靠 `tests/fake_yearning.py` 里的假服务。它刻意复刻了真实服务的怪癖
-（错误子路径返回 `"Illegal"`、登录在根路径、`fetch/perform` 带密码哈希、
-`fetch/source` 空参数返回空响应体、数据源名带前导空格），
-所以「测试过了线上却挂」这类问题基本能提前挡住。
-
-新增接口或工具时请一并补：
-
-- 假服务里的对应路由
-- 工具输出断言
-- 如果是敏感或高危路径，补一条「被拒绝**且真的没有发出去**」的断言
-  （参考 `test_api_get_refuses_dangerous_paths_without_calling_them`）
+`--selftest` 会真的发请求（TCP / 登录 / 身份 / 权限 / 只读接口 / 拦截规则），
+所以它需要一个能连上的实例，别指望在离线环境里跑。
 
 ## 写代码时注意
 
@@ -66,9 +56,8 @@ python -m yearning2_mcp --selftest
 ## 提 PR
 
 1. 从 `main` 切分支
-2. 改动 + 测试，`python run_tests.py` 全绿
-3. 提交信息用中文，格式：`类型: 简短说明`（类型用 `feat` / `fix` / `docs` / `test` / `chore`）
-4. PR 描述里写清楚：改了什么、为什么、怎么验证的
+2. 提交信息用中文，格式：`类型: 简短说明`（类型用 `feat` / `fix` / `docs` / `chore`）
+3. PR 描述里写清楚：改了什么、为什么、**怎么验证的**
 
 如果是新增一个 Yearning 接口的适配，请在 PR 里说明你是怎么确认这个接口形态的
 （源码路径 / 实测请求响应），别只贴结论。

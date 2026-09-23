@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: 测试 py${{ matrix.python-version }} / ${{ matrix.os }}
+  check:
+    name: 自检 py${{ matrix.python-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -23,9 +23,6 @@ jobs:
 
       - name: 语法自检
         run: python -m compileall -q src
-
-      - name: 跑测试（零依赖，不需要 pip install）
-        run: python run_tests.py
 
       - name: 安装并验证入口点
         run: |

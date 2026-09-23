@@ -186,11 +186,11 @@ yearning2-mcp --selftest         # 连通性 / 登录 / 权限 / 拦截规则，
 判定前先做单趟状态机去噪声：注释、字符串字面量、反引号标识符里的内容都不参与判断 ——
 否则 `SELECT '--' AS x` 会被当成注释截断。语句数上限 50 条。
 
-### 测试守着的东西
+### 边界强制在哪里
 
-`tests/test_tools.py::test_read_tools_never_write` 会把 8 个只读工具全部跑一遍，
-断言除登录外没有任何非 GET 请求发出去。
-每个「拒绝」用例都同时断言**请求确实没发出去**，而不只是看返回值。
+三层边界都在 `safety.py` / `writes.py` 的**执行层**强制，不是提示词约束：
+拒绝判定发生在任何 HTTP 请求发出**之前**；写动作只能从 `WRITE_ACTIONS` 白名单出去，
+方法 + 路径写死，调用方只能填业务参数、无法自定义目标路径。
 
 ---
 
@@ -239,22 +239,18 @@ yearning2-mcp --version
 
 ---
 
-## 从源码跑 / 跑测试
+## 从源码跑
+
+本项目用 `src/` 布局，所以要先装一次才能以模块方式启动：
 
 ```bash
 git clone https://github.com/guanjwen/yearning2-mcp.git
 cd yearning2-mcp
 
-python run_tests.py             # 153 个用例，全部离线，不需要装任何东西
-python run_tests.py -v
-
-python -m yearning2_mcp --selftest
+pip install -e .                # 或 pip install .
+yearning2-mcp --print-tools     # 确认工具清单生成正常
+yearning2-mcp --selftest        # 对真实实例自检
 ```
-
-测试用的假 Yearning 服务在 `tests/fake_yearning.py`，复刻了真实服务的怪癖
-（错误子路径返回字符串 `"Illegal"`、登录在根路径、`fetch/perform` 带密码哈希、
-`fetch/source` 空参数返回空响应体、带前导空格的脏数据源名），
-所以测试不需要真实环境、也能挡住"测试过了线上却挂"的那类问题。
 
 ---
 
@@ -265,7 +261,7 @@ python -m yearning2_mcp --selftest
 | Yearning | 2.3.x（路由表取自上游 `cookieY/Yearning` tag `2.3.5` 的 `src/router/router.go`，并在真实部署上逐条实测对齐） |
 | 认证 | LDAP 已实测；本地账号走 `POST /login`，同一套逻辑 |
 | 只读能力 | 全部接口已在真实部署上实测 |
-| 提工单 | **已实测到预览与全部闸门**（含 4 条负向用例：越权数据源、非法审核人、类型不匹配、缺 confirm）。真实提交会真的产生线上工单，没有在别人的生产环境上做；提交与预览复用同一份请求体构造，该路径由离线测试覆盖 |
+| 提工单 | **已实测到预览与全部闸门**（含 4 条负向用例：越权数据源、非法审核人、类型不匹配、缺 confirm）。真实提交会真的产生线上工单，没有在别人的生产环境上做；提交与预览复用同一份请求体构造 |
 | 执行查询 | 已实测闸门与拒绝路径；查询通道本身需要一条已批准的查询工单才能走通 |
 | 审批 / 管理 | **不提供，也不打算提供** |
 | Python | 3.9 ~ 3.14（3.13 / 3.14 已实测；CI 覆盖全矩阵） |
@@ -314,9 +310,8 @@ python -m yearning2_mcp --selftest
 
 ## 贡献
 
-见 [CONTRIBUTING.md](CONTRIBUTING.md)。核心约定四条：**保持零依赖**、
-**不引入审批类能力**、**新增拦截规则或闸门必须同时补测试和文档**、
-**负向用例要断言请求确实没发出去**。
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。核心约定两条：**保持零依赖**、
+**写操作必须走白名单 + 闸门，且不引入任何审批类能力**。
 
 ## 许可
 
